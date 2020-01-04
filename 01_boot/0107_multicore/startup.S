@@ -5,7 +5,6 @@
 _start:
 // ================================================================
 //  0x0000にロードした場合の割り込みエリア 0x0000にコピーする
-//  コピー後は絶対アドレスでアクセスするため
 //  ジャンプ先アドレスは後に生成する
 // ================================================================
 	b		_reset
@@ -30,33 +29,14 @@ _reset:
 //  初期CPUモードとブートアドレスを保存する
 // ================================================================
 	adr		r11, _start				// ブートアドレス
-	sub		r11, r11, #0x8000		// ブートアドレスと実アドレスのオフセット
-	str		r11, RPi_BootOffset		// ブートオフセットの保存
-
-// ================================================================
-//  割り込みテーブルを0x0000にコピー
-// ================================================================
-	mov     r1, #0x0000						// コピー先アドレス
-	mov		r0, r11							// コピー元アドレス
-    ldmia   r0!, {r2, r3, r4, r5, r6, r7, r8, r9}
-	mov		r2, r3							// リセット割り込み命令を書き換え
-    stmia   r1!, {r2, r3, r4, r5, r6, r7, r8, r9}
-
-	adr		r2, _start						// リセット割り込みアドレス
-	adr		r3, hang						// 未定義割り込みアドレス
-	mov		r4, r3							// ソフトウェア割り込みアドレス
-	mov		r5, r3							// プリフェッチアボート割り込みアドレス
-	mov		r6, r3							// データアボート割り込みアドレス
-	mov		r7, r3							// IRQ割り込みアドレス
-	mov		r8, r3							// FIQ割り込みアドレス
-    stmia   r1, {r2, r3, r4, r5, r6, r7, r8}	// 割り込みジャンプ先を書き込み
-    stmia   r0, {r2, r3, r4, r5, r6, r7, r8}	// 割り込みジャンプ先を書き込み
+	sub		r10, r11, #0x8000		// ブートアドレスと実アドレスのオフセット
+	str		r10, RPi_BootOffset		// ブートオフセットの保存
 
 // ================================================================
 //  IO_Base_Addr, LocalPeripheralsAddrの設定
 // ================================================================
 	mrc		p15, 0, r4, c0, c0, 0			// MIDRの読み込み
-	bic		r4, r4, #0x0F					// RevisionIDをクリア(念のため)
+	bic		r4, r4, #0x0F					// RevisionIDをクリア
 
 	mov		r1, #0x20000000					// IO_Base_Addr(Raspberry pi 1/Zeroの場合)
 	mov		r2, #0x00000000					// LocalPeripheralsAddr(Raspberry pi 1/Zeroの場合)
@@ -79,10 +59,29 @@ _reset:
 	str		r2, RPi_LocalPeripheralsAddr	// LocalPeripheralsAddrの保存
 
 // ================================================================
-//  Raspberry pi 1/Zeroでは直接cpsrに書き込む
-//  Raspberry pi 2以降でCPUモードがHYP_MODEの場合、
-//  eretを使用してシステムモードに移行
+//  割り込みテーブルを0x0000にコピー
 // ================================================================
+	mov     r1, #0x0000						// コピー先アドレス
+	mov		r0, r11							// コピー元アドレス
+    ldmia   r0!, {r2, r3, r4, r5, r6, r7, r8, r9}
+	mov		r2, r3							// リセット割り込み命令を書き換え
+    stmia   r1!, {r2, r3, r4, r5, r6, r7, r8, r9}
+
+	adr		r2, _start						// リセット割り込みアドレス
+	adr		r3, hang						// 未定義割り込みアドレス
+	mov		r4, r3							// ソフトウェア割り込みアドレス
+	mov		r5, r3							// プリフェッチアボート割り込みアドレス
+	mov		r6, r3							// データアボート割り込みアドレス
+	mov		r7, r3							// IRQ割り込みアドレス
+	mov		r8, r3							// FIQ割り込みアドレス
+    stmia   r1, {r2, r3, r4, r5, r6, r7, r8}	// 割り込みジャンプ先を書き込み
+    stmia   r0, {r2, r3, r4, r5, r6, r7, r8}	// 割り込みジャンプ先を書き込み
+
+// ================================================================
+//  CPUモードがHYP_MODEの場合、SVC_MODEに移行
+//  Raspberry pi 1/Zeroでは起動時SVC_MODEのため不要
+// ================================================================
+multicore_start:
     mrs		r0, cpsr				// CPUモードビットを含むCPSRレジスタをコピー
  	and		r1, r0, #0x1F			// CPUモードビットの抽出
  	cmp		r1, #0x1A				// HYP_MODEの確認
@@ -167,7 +166,7 @@ _reset:
     msr		CPSR_c, r6				// システムモードへ切り替え
 // ================================================================
 //  システムモードのスタックポインタのセットアップ
-//  rpi.hにてSTACK_SIZEを定義している場合はその値を優先
+//  STACK_SIZEを定義している場合はその値を優先
 // ================================================================
 #ifdef STACK_SIZE
 	ldr		r2, =STACK_SIZE
@@ -207,11 +206,10 @@ _reset:
 	orr		r0, #0xF00000			// 単精度/倍精度浮動小数点演算の有効化
 	mcr		p15, 0, r0, c1, c0, 2	// CPACR(アーキテクチャ機能アクセス制御レジスタ)
 
-	ldr		r11, RPi_LocalPeripheralsAddr	// RaspberryPi1/Zeroでは0x00000000となる
-	cmp		r11, #0					// RaspberryPi1/Zeroチェック(isb命令用)
+	ldr		r11, RPi_LocalPeripheralsAddr
+	cmp		r11, #0					// ARM11チェック(isb命令用)
 	beq		1f						// isb命令をスキップ
 
-	// コンパイルエラーが出るので .word で直接指示
 	.word	0xF57FF06F				// isb
 
 1:	mov		r0, #0x40000000			// VFP有効化
@@ -248,7 +246,7 @@ _reset:
 	cmp		r11, #0					// ARM11チェック(マルチコア処理スキップ用)
 	beq		.setup_finish			// シングルコアの場合はスキップ
 
-    adr		r2, _reset				// Core 1～3のセットアップアドレス
+    adr		r2, multicore_start		// Core 1～3のセットアップアドレス
 	str		r2, [r11, #0x9C]		// Mailbox3(Core 1)にアドレスを転送
 	str		r2, [r11, #0xAC]		// Mailbox3(Core 2)にアドレスを転送
 	str		r2, [r11, #0xBC]		// Mailbox3(Core 3)にアドレスを転送
@@ -262,17 +260,18 @@ _reset:
 //  main関数にジャンプする
 // ================================================================
 .setup_finish:
-	bl		main
+   	 bl		main
 
 // ================================================================
 //  main関数から戻った場合は無限ループ
 // ================================================================
 hang:
-	b		.								// 無限ループ
+	b		.
 
 // ================================================================
 //  Core 1～3のループ
 // ================================================================
+	.balign	4
 SecondarySpin:
 	mrc		p15, 0, r0, c0, c0, 5
 	and		r0, r0, #0x03			// Make core 2 bit bitmask in R0
@@ -285,9 +284,9 @@ SecondarySpin:
 	cmp		r4, r3					// Mailboxに何か書き込まれているかチェック
 	beq		1b						// 何もない場合はループ
 
-	mov		r0, #0					// r0 = 0(詳細不明)
-	ldr		r1, =3138				// r1 = マシンID(詳細不明)
-	ldr		r2, =0x100				// r2 = ATAGS(詳細不明)
+	mov		r0, #0					// r0 = 0
+	ldr		r1, =3138				// r1 = マシンID
+	ldr		r2, =0x100				// r2 = ATAGS
 	adr		lr, SecondarySpin		// 戻りアドレスをSecondarySpinにする
 	bx		r4						// 受け取ったアドレスへジャンプ
 
@@ -297,9 +296,6 @@ SecondarySpin:
 	.balign	4
 	.globl CoreExecute
 CoreExecute:
-	cmp		r0, #0x04
-	bcs		CoreExecuteFail			// 存在しないコアの場合は失敗扱い
-
 	ands	r0, r0, #0x03
 	beq		CoreExecuteFail			// Core 0の場合は失敗扱い
 
@@ -308,9 +304,9 @@ CoreExecute:
 	beq		CoreExecuteFail			// Raspberry Pi 1/Zeroの場合は失敗扱い
 
 	add		r3, r3, #0xCC			// Mailbox3 (Core 0) Read
-	ldr		r2, [r3, r0, lsl #4]	// Mailboxアドレスを読み込み
+	ldr		r2, [r3, r0, lsl #4]	// Mailboxへアドレスを転送
 	cmp		r2, #0
-	bne		CoreExecuteFail			// アドレスが残ったままの場合は失敗
+	bne		CoreExecuteFail
 
 	sub		r3, r3, #0x40			// Mailbox3 (Core 0) Write
 	str		r1, [r3, r0, lsl #4]	// Mailboxへアドレスを転送
@@ -320,6 +316,36 @@ CoreExecute:
 CoreExecuteFail:
 	mov		r0, #0					// 戻り値 0
 	bx		lr						// 戻る
+
+// ================================================================
+//  mailboxアクセス
+//  void mailbox(void *AlinedBuffer, uint32_t Channel);
+// ================================================================
+	.balign	4
+	.globl mailbox
+mailbox:
+	ldr		r12, RPi_IO_Base_Addr
+	add		r12, r12, #0x0000B800
+
+	bic		r2, r0, #0x0F
+	and		r3, r1, #0x0F
+	orr		r2, r2, r3
+
+1:	ldr		r3, [r12, #0x98]
+	ands	r3, #0x80000000
+	bne		1b
+
+	str		r2, [r12, #0xA0]
+
+2:	ldr		r3, [r12, #0x98]
+	ands	r3, #0x40000000
+	bne		2b
+
+	ldr		r3, [r12, #0x80]
+	cmp		r3, r2
+	bne		1b
+
+	bx		lr
 
 RPi_CoresReady:
 	.word	0x00000000			// 準備完了したコア数

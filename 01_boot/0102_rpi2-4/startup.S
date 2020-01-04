@@ -7,7 +7,7 @@ _start:
 //  IO_Base_Addr, LocalPeripheralsAddrの設定
 // ================================================================
 	mrc		p15, 0, r4, c0, c0, 0			// MIDRの読み込み
-	bic		r4, r4, #0x0F					// RevisionIDをクリア(念のため)
+	bic		r4, r4, #0x0F					// RevisionIDをクリア
 
 	mov		r1, #0x20000000					// IO_Base_Addr(Raspberry pi 1/Zeroの場合)
 	mov		r2, #0x00000000					// LocalPeripheralsAddr(Raspberry pi 1/Zeroの場合)
@@ -30,12 +30,16 @@ _start:
 	str		r2, RPi_LocalPeripheralsAddr	// LocalPeripheralsAddrの保存
 
 // ================================================================
-//  スタックポインタを設定してmain関数へジャンプ
+//  main関数にジャンプする
 // ================================================================
 	mov		sp, #0x800000					// スタックポインタを適当に設定
-	b		main							// main関数へジャンプ
+	bl		main
+
+// ================================================================
+//  main関数から戻った場合は無限ループ
+// ================================================================
 hang:
-	b		.								// 無限ループ
+	b		.
 
 	.globl RPi_IO_Base_Addr
 RPi_IO_Base_Addr:				// Peripheral Base Addr
