@@ -9,7 +9,5 @@ Baremetalのための試行錯誤の履歴
 02_LED  
 各モデルのオンボードLED(PWR,ACT)を使えるようにします。
 
-(以下、更新予定)
-
 03_UART  
 RaspberryPi3以前ではUART0～UART1を、RaspberryPi4では加えてUART2～UART5を使えるようにします。
