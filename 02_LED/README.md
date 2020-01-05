@@ -28,6 +28,9 @@ RaspberryPi3 Model A+/Model B+ におけるオンボードLチカ
 0207_RPI4  
 RaspberryPi4 Model B におけるオンボードLチカ
 
+0208_All  
+RaspberryPi全モデルでオンボードLチカ
+
 具体的にまとめると以下の通り
 
 |Model                |ACT LED  |PWR LED  |
